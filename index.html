@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>弾幕アイドルRPG（簡易版）</title>
+<style>
+  body { margin:0; background:#000; overflow:hidden; touch-action:none; }
+  canvas { display:block; margin:0 auto; background:#111; }
+  #ui {
+    position:fixed; top:8px; left:8px; color:#0f0;
+    font-family:monospace; font-size:14px;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"></div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+let save = JSON.parse(localStorage.getItem("danmaku_save")) || {
+  hp:10, score:0
+};
+
+const player = {
+  x: canvas.width/2,
+  y: canvas.height*0.8,
+  r: 12,
+  hp: save.hp
+};
+
+let bullets = [];
+let enemies = [];
+let enemyBullets = [];
+let frame = 0;
+
+canvas.addEventListener("touchmove", e=>{
+  const t = e.touches[0];
+  player.x = t.clientX;
+  player.y = t.clientY;
+});
+
+function shoot(){
+  bullets.push({x:player.x,y:player.y-10,vy:-10});
+}
+
+function spawnEnemy(){
+  enemies.push({
+    x:Math.random()*canvas.width,
+    y:-20,
+    hp:3
+  });
+}
+
+function enemyShoot(e){
+  enemyBullets.push({
+    x:e.x,y:e.y,vx:(player.x-e.x)/60,vy:4
+  });
+}
+
+function saveGame(){
+  localStorage.setItem("danmaku_save",JSON.stringify({
+    hp:player.hp,
+    score:save.score
+  }));
+}
+
+function loop(){
+  frame++;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(frame%6===0) shoot();
+  if(frame%60===0) spawnEnemy();
+
+  // player
+  ctx.fillStyle="#0ff";
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+  ctx.fill();
+
+  // bullets
+  ctx.fillStyle="#ff0";
+  bullets.forEach(b=>{ b.y+=b.vy; ctx.fillRect(b.x-2,b.y,4,8); });
+  bullets = bullets.filter(b=>b.y>-20);
+
+  // enemies
+  ctx.fillStyle="#f00";
+  enemies.forEach(e=>{
+    e.y+=2;
+    ctx.fillRect(e.x-12,e.y-12,24,24);
+    if(frame%90===0) enemyShoot(e);
+  });
+
+  // enemy bullets
+  ctx.fillStyle="#f0f";
+  enemyBullets.forEach(b=>{
+    b.x+=b.vx; b.y+=b.vy;
+    ctx.fillRect(b.x-3,b.y-3,6,6);
+
+    const dx=b.x-player.x, dy=b.y-player.y;
+    if(Math.hypot(dx,dy)<player.r){
+      player.hp--;
+      b.y=9999;
+      saveGame();
+    }
+  });
+
+  // hit check
+  bullets.forEach(b=>{
+    enemies.forEach(e=>{
+      if(Math.abs(b.x-e.x)<12 && Math.abs(b.y-e.y)<12){
+        e.hp--; b.y=-9999;
+        if(e.hp<=0){ e.y=9999; save.score+=10; saveGame(); }
+      }
+    });
+  });
+
+  enemies = enemies.filter(e=>e.y<canvas.height+30 && e.hp>0);
+  enemyBullets = enemyBullets.filter(b=>b.y<canvas.height+30);
+
+  document.getElementById("ui").innerText =
+    `HP:${player.hp}  SCORE:${save.score}`;
+
+  if(player.hp>0){
+    requestAnimationFrame(loop);
+  }else{
+    ctx.fillStyle="#fff";
+    ctx.font="30px sans-serif";
+    ctx.fillText("GAME OVER",canvas.width/2-80,canvas.height/2);
+  }
+}
+
+loop();
+</script>
+</body>
+</html>
